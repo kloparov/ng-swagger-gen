@@ -376,8 +376,10 @@ function applyTagFilter(models, services, options) {
   // Normalize the excluded tag names
   const excludeTags = options.excludeTags;
   var excluded = null;
+  var exlcudedOperations = null;
   if (excludeTags && excludeTags.length > 0) {
     excluded = [];
+    exlcudedOperations = [...excludeTags];
     for (i = 0; i < excludeTags.length; i++) {
       excluded.push(tagName(excludeTags[i], options));
     }
@@ -401,6 +403,19 @@ function applyTagFilter(models, services, options) {
       var service = services[serviceName];
       service.serviceDependencies.forEach(addToUsed);
       service.serviceErrorDependencies.forEach(addToUsed);
+    } else {
+      // Exclude endpoints which tags are included in exclude tags.
+      for (var i = 0; i < services[serviceName].serviceOperations.length; i++) {
+        var operation = services[serviceName].serviceOperations[i];
+        for (var operationTag of operation.operationTags) {
+          if (exlcudedOperations.includes(operationTag)) {
+            var operationId = services[serviceName].serviceOperations[i].operationName;
+            
+            services[serviceName].operationIds.delete(operationId);
+            services[serviceName].serviceOperations.splice(i, 1);
+          }       
+        }
+      }
     }
   }
 
@@ -1130,6 +1145,10 @@ function operationId(given, method, url, allKnown) {
   return id;
 }
 
+function toTags(tags) {
+  return tags.length == 0 ? [] : tags;
+}
+
 /**
  * Process API paths, returning an object with descriptors keyed by tag name.
  * It is required that operations define a single tag, or they are ignored.
@@ -1158,6 +1177,7 @@ function processServices(swagger, models, options) {
           serviceFile: toFileName(serviceClass) + options.customFileSuffix.service,
           operationIds: new Set(),
           serviceOperations: [],
+          serviceTags: toTags(def.tags),
         };
         services[tag] = descriptor;
       }
@@ -1299,6 +1319,7 @@ function processServices(swagger, models, options) {
         operationComments: toComments(docString, 1),
         operationParameters: operationParameters,
         operationResponses: operationResponses,
+        operationTags: toTags(tags),
       };
       var modelResult = models[normalizeModelName(removeBrackets(resultType))];
       var actualType = resultType;
